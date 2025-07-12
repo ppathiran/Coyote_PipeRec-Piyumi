@@ -44,7 +44,6 @@ void StoreData(hls::stream<data_t> &in_stream,
 }
 
 //router to split dense vs sparse
-/*
 void RouteDenseSparse(hls::stream<data_t> &in,
                       hls::stream<data_t> &q_dense,
                       hls::stream<data_t> &q_sparse)
@@ -61,89 +60,59 @@ void RouteDenseSparse(hls::stream<data_t> &in,
         pkt_id++;
     }
 }
-*/
 
 
-/* ─────────────────────────────────────────────── */
-/*  In‑line conditional preprocessing stages       */
-/* ─────────────────────────────────────────────── */
 void Dense_NegsToZero(hls::stream<data_t> &in,
                       hls::stream<data_t> &out)
 {
 #pragma HLS PIPELINE II=1
 #pragma HLS INLINE off
-    static unsigned pkt_id = 0;          // 0=dense, 1/2=sparse
     if (!in.empty()) {
         data_t p = in.read();
-
-        if (pkt_id % 3 == 0) {           // dense packet → apply clamp‑to‑zero
-            ap_uint<512> d = p.data;
-            for (int i = 0; i < 16; i++) {
+        ap_uint<512> d = p.data;
+        for (int i = 0; i < 16; i++) {
 #pragma HLS UNROLL
-                int32_t v = d(32*i+31, 32*i);
-                d(32*i+31, 32*i) = (v < 0) ? 0 : v;
-            }
-            p.data = d;
+            int32_t v = d(32*i+31, 32*i);
+            d(32*i+31, 32*i) = (v < 0) ? 0 : v;
         }
-        out.write(p);
-        pkt_id++;
+        p.data = d;  out.write(p);
     }
 }
-
 
 void Dense_Log(hls::stream<data_t> &in,
                hls::stream<data_t> &out)
 {
 #pragma HLS PIPELINE II=1
 #pragma HLS INLINE off
-    static unsigned pkt_id = 0;
     if (!in.empty()) {
-        data_t p = in.read();
-
-        if (pkt_id % 3 == 0) {           // dense packet → log(x+1)
-            ap_uint<512> d = p.data;
-            for (int i = 0; i < 16; i++) {
+        data_t p = in.read();  ap_uint<512> d = p.data;
+        for (int i = 0; i < 16; i++) {
 #pragma HLS UNROLL
-                int32_t v = d(32*i+31, 32*i);
-                conv c; c.float32 = hls::logf(v + 1.0f);
-                d(32*i+31, 32*i) = c.uint32;
-            }
-            p.data = d;
+            int32_t  v;  v = d(32*i+31, 32*i);
+            conv c; c.float32 = hls::logf(v + 1);
+            d(32*i+31, 32*i) = c.uint32;
         }
-        out.write(p);
-        pkt_id++;
+        p.data = d;  out.write(p);
     }
 }
-
-
 
 void Sparse_HexToIntMod(hls::stream<data_t> &in,
                         hls::stream<data_t> &out)
 {
 #pragma HLS PIPELINE II=1
 #pragma HLS INLINE off
-    static unsigned pkt_id = 0;
     if (!in.empty()) {
-        data_t p = in.read();
-
-        if (pkt_id % 3 != 0) {           // sparse packets → value & 0x3FF
-            ap_uint<512> d = p.data;
-            for (int i = 0; i < 16; i++) {
+        data_t p = in.read();  ap_uint<512> d = p.data;
+        for (int i = 0; i < 16; i++) {
 #pragma HLS UNROLL
-                ap_uint<32> v = d(32*i+31, 32*i);
-                d(32*i+31, 32*i) = v & 0x3FF;
-            }
-            p.data = d;
+            ap_uint<32> v = d(32*i+31, 32*i);
+            d(32*i+31, 32*i) = v & 0x3FF;   // %1024
         }
-        out.write(p);
-        pkt_id++;
+        p.data = d;  out.write(p);
     }
 }
 
-
-
 //merge output and restore ordering s.t. dense-sparse-sparse
-/*
 void MergeDenseSparse(hls::stream<data_t> &q_dense,
                       hls::stream<data_t> &q_sparse,
                       hls::stream<data_t> &out)
@@ -161,7 +130,4 @@ void MergeDenseSparse(hls::stream<data_t> &q_dense,
                              : ap_uint<2>(0);
 }
 }
-*/
-
-
 

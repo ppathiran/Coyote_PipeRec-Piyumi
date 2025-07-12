@@ -27,11 +27,11 @@ void hls_vadd(hls::stream<axi_s> &axi_in,
     Dense_NegsToZero  (s_load,  q_dense0);
     Dense_Log         (q_dense0,    q_dense1);
 
-    Sparse_HexToIntMod(q_dense1, q_sparse_out);
+    //Sparse_HexToIntMod(q_sparse_in, q_sparse_out);
 
     //MergeDenseSparse  (q_dense1,    q_sparse_out, s_final);
     //MergeDenseSparse  (q_dense_in,    q_sparse_in, s_final);
 
-    StoreData         (q_sparse_out,     axi_out);
+    StoreData         (q_dense1,     axi_out);
 }
 

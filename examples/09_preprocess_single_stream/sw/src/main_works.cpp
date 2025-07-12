@@ -41,7 +41,7 @@
 
 // Constants
 #define N_LATENCY_REPS 1
-#define N_THROUGHPUT_REPS 1 //64
+#define N_THROUGHPUT_REPS 64
 
 #define DEFAULT_GPU_ID 0
 #define DEFAULT_VFPGA_ID 0
@@ -52,50 +52,10 @@ double run_bench(
 ) {
     // Randomly set the source data for functional verification
     assert(sg.local.src_len == sg.local.dst_len);
-    
-    /*
     for (int i = 0; i < sg.local.src_len / sizeof(int); i++) {
         src_mem[i] = rand() % 1024 - 512;     
         dst_mem[i] = 0;                        
     }
-    */
-
-    
-    int batch_size = (sg.local.src_len / sizeof(int)) / 48;
-    for (int sample_idx = 0; sample_idx < batch_size; ++sample_idx) {
-            int base_idx = sample_idx * 48;
-
-            // --- Packet 1: 1 label + 13 dense + 2 padding ---
-            src_mem[base_idx + 0] = rand() % 2;
-
-            for (int i = 0; i < 13; ++i) {
-                src_mem[base_idx + 1 + i] = rand() % 512 - 256;
-            }
-
-            src_mem[base_idx + 14] = 0;
-            src_mem[base_idx + 15] = 0;
-
-            // --- Packet 2: 16 sparse ---
-            for (int i = 0; i < 16; ++i) {
-                src_mem[base_idx + 16 + i] = rand() % 100000;
-            }
-
-            // --- Packet 3: 10 sparse + 6 padding ---
-            for (int i = 0; i < 10; ++i) {
-                src_mem[base_idx + 32 + i] = rand() % 100000;
-            }
-
-            for (int i = 0; i < 6; ++i) {
-                src_mem[base_idx + 42 + i] = 0;
-            }
-
-            // Optional: clear destination memory
-            for (int i = 0; i < 48; ++i) {
-                dst_mem[base_idx + i] = 0;
-
-            }
-    }
-    
 
     std::cout << "\n[C++] Data generated (first 48 values):" << std::endl;
         for (int i = 0; i < 48; ++i) {
@@ -126,12 +86,6 @@ double run_bench(
         for (int i = 0; i < 48; ++i) {
             std::cout << dst_mem[i] << " ";
         }
-    std::cout << std::endl;
-
-    std::cout << "\n[C++] FPGA output: Second 48 values:" << std::endl;
-        for (int i = 48; i < 96; ++i) {
-            std::cout << dst_mem[i] << " ";
-        }
     std::cout << std::endl; 
 
     // Make sure destination matches the source + 1 (the vFPGA logic in perf_local adds 1 to every 32-bit element, i.e. integer)
@@ -147,9 +101,9 @@ int main(int argc, char *argv[])  {
     unsigned int min_size, max_size, n_runs;
     boost::program_options::options_description runtime_options("Coyote Perf GPU Options");
     runtime_options.add_options()
-        ("runs,r", boost::program_options::value<unsigned int>(&n_runs)->default_value(1), "Number of times to repeat the test") // 100
-        ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(49152), "Starting (minimum) transfer size")   // smaller than 192 bytes doesn't make sense as we need 3x16 ints per sample; original: 64, changed to: 256
-        ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(49152), "Ending (maximum) transfer size");   // original: 4 * 1024 * 1024
+        ("runs,r", boost::program_options::value<unsigned int>(&n_runs)->default_value(100), "Number of times to repeat the test")
+        ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(256), "Starting (minimum) transfer size")   // smaller than 192 bytes doesn't make sense as we need 3x16 ints per sample; 64
+        ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(4 * 1024 * 1024), "Ending (maximum) transfer size");
     boost::program_options::variables_map command_line_arguments;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, runtime_options), command_line_arguments);
     boost::program_options::notify(command_line_arguments);
@@ -166,10 +120,8 @@ int main(int argc, char *argv[])  {
     // Note, the only difference from Example 1 is the way memory is allocated
     std::unique_ptr<coyote::cThread<std::any>> coyote_thread(new coyote::cThread<std::any>(DEFAULT_VFPGA_ID, getpid(), 0));
 
-    unsigned int allocated_size = 4 * 1024 * 1024;  // If allocated > 4’194’304 Bytes (4MiB), the FPGA output will be all 0s as src_mem & dst_mem pointers will be in the same "window"
-
-    int *src_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocated_size});  //max_size
-    int *dst_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocated_size});  //max_size
+    int *src_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::GPU, max_size});
+    int *dst_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::GPU, max_size});
     if (!src_mem || !dst_mem) {  throw std::runtime_error("Couldn't allocate memory"); }
     if (!src_mem || !dst_mem) { throw std::runtime_error("Could not allocate memory; exiting..."); }
 

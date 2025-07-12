@@ -29,17 +29,21 @@ double run_bench_triple(
     uint                                        transfers,
     uint                                        n_runs)
 {
+    std::cout << "debug 3";
     
     for (int s=0; s<3; ++s){
         size_t n_int = sg[s].local.src_len / sizeof(int);
         for (size_t i=0;i<n_int;i++){ src[s][i] = rand()%1024 - 512; dst[s][i] = 0; }
     }
 
+    std::cout << "debug 4";
     auto  prep_fn  = [&](){ cyt->clearCompleted(); };
 
     coyote::cBench bench(n_runs);
+    std::cout << "debug 5";
     auto  bench_fn = [&](){
         for (uint rep=0; rep<transfers; ++rep){
+	    std::cout << "debug 6";
             cyt->invoke(coyote::CoyoteOper::LOCAL_TRANSFER, &sg[0]);
             cyt->invoke(coyote::CoyoteOper::LOCAL_TRANSFER, &sg[1]);
             cyt->invoke(coyote::CoyoteOper::LOCAL_TRANSFER, &sg[2]);
@@ -97,16 +101,39 @@ int main(int argc,char* argv[])
                 .dst_addr = dst_mem[s],
                 .dst_len  = 0 };
 
+    //sg[0].local.chan = 0;   // dense  -> axis_host_recv[0]
+    //sg[1].local.chan = 1;   // sparse0-> axis_host_recv[1]
+    //sg[2].local.chan = 2;   // sparse1-> axis_host_recv[2]
 
+    // dense input
+    sg[0].local.src_stream = 0;
+    sg[0].local.dst_stream = 0;
+
+    // sparse0 input
+    sg[1].local.src_stream = 1;
+    sg[1].local.dst_stream = 0;
+
+    // sparse1 input
+    sg[2].local.src_stream = 2;
+    sg[2].local.dst_stream = 0;
+
+
+    std::cout << "debug 0";
     PR_HEADER("PERF‑GPU triple‑stream");
+    std::cout << "debug 0.1";
     unsigned curr_size = min_size;
+    std::cout << "debug 0.2";
+    std::cout << "curr_size" << curr_size;
+    std::cout << "min_size" << min_size;
     while (curr_size <= max_size) {
+	std::cout << "debug 1";
         std::cout << "Size: " << std::setw(8) << curr_size << "; ";
 
         for (int s=0; s<3; ++s){
             sg[s].local.src_len = curr_size;
             sg[s].local.dst_len = curr_size;
         }
+	std::cout << "debug 2";
 
         double thr_time = run_bench_triple(cyt, sg, src_mem, dst_mem,
                                            N_THROUGHPUT_REPS, n_runs);
@@ -120,6 +147,7 @@ int main(int argc,char* argv[])
 
         curr_size *= 2;
     }
+    std::cout << "end";
     return EXIT_SUCCESS;
 }
 

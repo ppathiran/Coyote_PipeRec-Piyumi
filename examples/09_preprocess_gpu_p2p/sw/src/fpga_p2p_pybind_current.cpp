@@ -5,7 +5,6 @@
 #include <cassert>
 #include <iomanip>
 #include <ctime>
-#include <utility>
 
 // AMD GPU management & run-time libraries
 #include <hip/hip_runtime.h>
@@ -42,10 +41,6 @@ public:
     int *dst_mem[2];
     coyote::sgEntry sg;
 
-    // cumulative stats
-    double   total_latency_ns  = 0.0;
-    double   total_bytes       = 0.0;
-
     FpgaP2PWrapper(int batch_size_input) {
         batch_size = batch_size_input;
         num_elements = batch_size * 48;
@@ -58,9 +53,8 @@ public:
 
         coyote_thread = std::make_unique<coyote::cThread<std::any>>(DEFAULT_VFPGA_ID, getpid(), 0);
 
-	unsigned int allocate_size = 4 * 1024 * 1024;  // max. possible allocation is 4MiB, otherwise src_mem and dst_mem pointers will be in the same "window", resulting in no FPGA output
-        src_mem = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size}));  
-        dst_mem[0] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size})); 
+        src_mem = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, size}));
+        dst_mem[0] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, size}));
         dst_mem[1] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, size}));
 
         sg.local = {.src_addr = src_mem, .src_len = size, .dst_addr = dst_mem[0], .dst_len = size};
@@ -102,14 +96,11 @@ public:
             }
         }
 
-	// DEBUG
-	/*
         std::cout << "\n[C++] Batch data generated (first sample):" << std::endl;
         for (int i = 0; i < 48; ++i) {
             std::cout << src_mem[i] << " ";
         }
         std::cout << std::endl;
-	*/
     }
 
     double run_bench(uint transfers, int buffer_idx) {
@@ -124,24 +115,34 @@ public:
         auto bench_fn = [&]() {
             for (int i = 0; i < transfers; i++) {
                 coyote_thread->invoke(coyote::CoyoteOper::LOCAL_TRANSFER, &sg);
+                std::cout << "[C++] Called invoke on FPGA kernel per transfer" << std::endl;
             }
-
+	    std::cout << "[C++] Called invoke on FPGA kernel afer for-loop" << std::endl;
             while (coyote_thread->checkCompleted(coyote::CoyoteOper::LOCAL_TRANSFER) != transfers) {}
         };
 
         bench.execute(bench_fn, prep_fn);
 
-	// DEBUG
-        //std::cout << "\n[C++] GPU Pointer: " << static_cast<void*>(dst_mem[buffer_idx]) << std::endl;
+        std::cout << "\n[C++] GPU Pointer: " << static_cast<void*>(dst_mem[buffer_idx]) << std::endl;
 
-	// DEBUG
-	/*
         std::cout << "\n[C++] FPGA output: First sample of the current batch:" << std::endl;
         for (int i = 0; i < 48; ++i) {
             std::cout << dst_mem[buffer_idx][i] << " ";
         }
         std::cout << std::endl;
-       
+
+	// Print the first 40000 samples in the current batch
+	std::ofstream dump("fpga_batch_dump.txt");
+	int samples_to_print = 22000;
+	dump << "\n[C++] FPGA output: First " << samples_to_print << " samples of the current batch:\n";
+	for (int s = 0; s < samples_to_print; ++s) {
+    	    int base_idx = s * 48;
+            dump << "Sample " << s << ": ";
+    	    for (int i = 0; i < 48; ++i) {
+                dump << dst_mem[buffer_idx][base_idx + i] << " ";
+            }
+    	    dump << '\n';
+	}
 
         std::cout << "\n[C++] FPGA output: Last sample of the current batch:" << std::endl;
         int last_sample_base_idx = (batch_size - 1) * 48;
@@ -149,42 +150,39 @@ public:
             std::cout << dst_mem[buffer_idx][last_sample_base_idx + i] << " ";
         }
         std::cout << std::endl;
-	*/
+
+	//std::ofstream dump("fpga_batch_dump.txt");
+	//dump << "\n[C++] FPGA output: ALL samples in the current batch:\n";
+
+	//for (int s = 0; s < batch_size; ++s) {
+        //    int base_idx = s * 48;
+
+    	//    dump << "Sample " << s << ": ";
+    	//    for (int i = 0; i < 48; ++i) {
+        //        dump << dst_mem[buffer_idx][base_idx + i] << ' ';
+    	//    }
+    	//    dump << '\n';
+	//}
+
 
         return bench.getAvg();
     }
 
     void preprocess_single_batch(int buffer_idx) {
-        //PR_HEADER("CLI PARAMETERS:");
-        //std::cout << "Transfer size: " << size << std::endl << std::endl;
+        PR_HEADER("CLI PARAMETERS:");
+        std::cout << "Transfer size: " << size << std::endl << std::endl;
 
         sg.local.dst_addr = dst_mem[buffer_idx];
 
         double latency_time = run_bench(N_THROUGHPUT_REPS, buffer_idx);
         double throughput = ((double)N_THROUGHPUT_REPS * (double)size) / (1024.0 * 1024.0 * latency_time * 1e-9);
-        //std::cout << "\n[C++] Preprocessing + Transfer Latency: " << std::setw(8) << latency_time / 1e3 << " us" << std::endl;
-        //std::cout << "[C++] Preprocessing + Transfer Throughput: " << std::setw(8) << throughput << " MB/s" << std::endl;
-        
-	// accumulate time and bytes
-  	total_latency_ns += latency_time;  // ns
-	total_bytes      += static_cast<double>(N_THROUGHPUT_REPS) * size;  // bytes
-
+        std::cout << "\n[C++] Preprocessing + Transfer Latency: " << std::setw(8) << latency_time / 1e3 << " us" << std::endl;
+        std::cout << "[C++] Preprocessing + Transfer Throughput: " << std::setw(8) << throughput << " MB/s" << std::endl;
     }
 
     uint64_t get_dst_ptr(int buffer_idx) {
         return reinterpret_cast<uint64_t>(dst_mem[buffer_idx]);
     }
-
-
-    // returns {total_latency_µs, overall_throughput_MBps}
-    std::pair<double, double> get_measurements() const {
-        if (total_latency_ns == 0.0)  
-            return {0.0, 0.0};
-
-        double tput_MBps = total_bytes / (1024.0 * 1024.0 * total_latency_ns * 1e-9);
-        return {total_latency_ns / 1e3, tput_MBps};  // µs, MB/s
-    }
-
 };
 
 PYBIND11_MODULE(fpga_p2p_pybind, m) {
@@ -192,8 +190,6 @@ PYBIND11_MODULE(fpga_p2p_pybind, m) {
         .def(py::init<int>())
         .def("get_dst_ptr", &FpgaP2PWrapper::get_dst_ptr, py::arg("buffer_idx"))
         .def("preprocess_single_batch", &FpgaP2PWrapper::preprocess_single_batch, py::arg("buffer_idx"))
-        .def("generate_batch_data", &FpgaP2PWrapper::generate_batch_data)
-        .def("get_measurements", &FpgaP2PWrapper::get_measurements, "Returns (total_latency_us, overall_throughput_MBps)");
-
+        .def("generate_batch_data", &FpgaP2PWrapper::generate_batch_data);
 }
 
