@@ -56,12 +56,14 @@ double run_bench(
         src_mem[i] = rand() % 1024 - 512;     
         dst_mem[i] = 0;                        
     }
-
+    
+    /*
     std::cout << "\n[C++] Data generated (first 48 values):" << std::endl;
         for (int i = 0; i < 48; ++i) {
             std::cout << src_mem[i] << " ";
         }
     std::cout << std::endl;
+    */
 
     auto prep_fn = [&]() {
         // Clear any previous completion flags
@@ -82,11 +84,13 @@ double run_bench(
     };
     bench.execute(bench_fn, prep_fn);
 
+    /*
     std::cout << "\n[C++] FPGA output: First 48 values:" << std::endl;
         for (int i = 0; i < 48; ++i) {
             std::cout << dst_mem[i] << " ";
         }
     std::cout << std::endl; 
+    */
 
     // Make sure destination matches the source + 1 (the vFPGA logic in perf_local adds 1 to every 32-bit element, i.e. integer)
     //for (int i = 0; i < sg.local.src_len / sizeof(int); i++) {
@@ -102,7 +106,7 @@ int main(int argc, char *argv[])  {
     boost::program_options::options_description runtime_options("Coyote Perf GPU Options");
     runtime_options.add_options()
         ("runs,r", boost::program_options::value<unsigned int>(&n_runs)->default_value(100), "Number of times to repeat the test")
-        ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(256), "Starting (minimum) transfer size")   // smaller than 192 bytes doesn't make sense as we need 3x16 ints per sample; 64
+        ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(64), "Starting (minimum) transfer size")   // 256, smaller than 192 bytes doesn't make sense as we need 3x16 ints per sample; 64
         ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(4 * 1024 * 1024), "Ending (maximum) transfer size");
     boost::program_options::variables_map command_line_arguments;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, runtime_options), command_line_arguments);

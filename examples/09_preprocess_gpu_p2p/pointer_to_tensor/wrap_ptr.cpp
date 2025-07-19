@@ -16,7 +16,7 @@ torch::Tensor copy_coyote_ptr(uint64_t ptr, int64_t numel, int device_id) {
                   << hipGetErrorString(err) << std::endl;
         throw std::runtime_error("hipPointerGetAttributes failed");
     }
-    std::cerr << "[C++ Wrapper] Pointer is on device: " << attr.device << std::endl;
+    //std::cerr << "[C++ Wrapper] Pointer is on device: " << attr.device << std::endl;
 
     // create a dst tensor on GPU with dtype uint32
     auto options = torch::TensorOptions()

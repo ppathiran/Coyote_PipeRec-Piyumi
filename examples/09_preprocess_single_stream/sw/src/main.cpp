@@ -96,12 +96,13 @@ double run_bench(
             }
     }
     
-
+    /*
     std::cout << "\n[C++] Data generated (first 48 values):" << std::endl;
         for (int i = 0; i < 48; ++i) {
             std::cout << src_mem[i] << " ";
         }
     std::cout << std::endl;
+    */
 
     auto prep_fn = [&]() {
         // Clear any previous completion flags
@@ -109,19 +110,28 @@ double run_bench(
     };
 
     // Execute benchmark
-    coyote::cBench bench(n_runs);
+    coyote::cBench bench(n_runs, 0);
+    auto total_start = std::chrono::high_resolution_clock::now();
     auto bench_fn = [&]() {
         // Launch (queue) multiple transfers in parallel for throughput tests, or 1 in case of latency tests
         // Recall, coyote_thread->invoke is asynchronous (but can be made sync through different sgFlags)
-        for (int i = 0; i < transfers; i++) {
+        auto start = std::chrono::high_resolution_clock::now();
+	for (int i = 0; i < transfers; i++) {
             coyote_thread->invoke(coyote::CoyoteOper::LOCAL_TRANSFER, &sg);
         }
 
         // Wait until all of them are finished
         while (coyote_thread->checkCompleted(coyote::CoyoteOper::LOCAL_TRANSFER) != transfers) {}
+	auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsed_seconds = end - start;
+	std::cout << "Elapsed time: " << elapsed_seconds.count() << "s\n";
     };
     bench.execute(bench_fn, prep_fn);
+    auto total_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> total_elapsed_seconds = total_end - total_start;
+    std::cout << "Total elapsed time: " << total_elapsed_seconds.count() << "s\n";
 
+    /*
     std::cout << "\n[C++] FPGA output: First 48 values:" << std::endl;
         for (int i = 0; i < 48; ++i) {
             std::cout << dst_mem[i] << " ";
@@ -133,6 +143,7 @@ double run_bench(
             std::cout << dst_mem[i] << " ";
         }
     std::cout << std::endl; 
+    */
 
     // Make sure destination matches the source + 1 (the vFPGA logic in perf_local adds 1 to every 32-bit element, i.e. integer)
     //for (int i = 0; i < sg.local.src_len / sizeof(int); i++) {
@@ -148,8 +159,8 @@ int main(int argc, char *argv[])  {
     boost::program_options::options_description runtime_options("Coyote Perf GPU Options");
     runtime_options.add_options()
         ("runs,r", boost::program_options::value<unsigned int>(&n_runs)->default_value(1), "Number of times to repeat the test") // 100
-        ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(49152), "Starting (minimum) transfer size")   // smaller than 192 bytes doesn't make sense as we need 3x16 ints per sample; original: 64, changed to: 256
-        ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(49152), "Ending (maximum) transfer size");   // original: 4 * 1024 * 1024
+        ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(786432), "Starting (minimum) transfer size")   // smaller than 192 bytes doesn't make sense as we need 3x16 ints per sample; original: 64, changed to: 256
+        ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(786432), "Ending (maximum) transfer size");   // original: 4 * 1024 * 1024
     boost::program_options::variables_map command_line_arguments;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, runtime_options), command_line_arguments);
     boost::program_options::notify(command_line_arguments);

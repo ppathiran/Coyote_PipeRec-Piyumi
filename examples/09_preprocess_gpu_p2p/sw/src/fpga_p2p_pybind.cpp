@@ -61,7 +61,7 @@ public:
 	unsigned int allocate_size = 4 * 1024 * 1024;  // max. possible allocation is 4MiB, otherwise src_mem and dst_mem pointers will be in the same "window", resulting in no FPGA output
         src_mem = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size}));  
         dst_mem[0] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size})); 
-        dst_mem[1] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, size}));
+        dst_mem[1] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size})); //changed to allocate_size
 
         sg.local = {.src_addr = src_mem, .src_len = size, .dst_addr = dst_mem[0], .dst_len = size};
     }
@@ -95,7 +95,7 @@ public:
                 src_mem[base_idx + 42 + i] = 0;
             }
 
-            // Optional: clear destination memory
+            // clear destination memory
             for (int i = 0; i < 48; ++i) {
                 dst_mem[0][base_idx + i] = 0;
                 dst_mem[1][base_idx + i] = 0;
@@ -115,7 +115,7 @@ public:
     double run_bench(uint transfers, int buffer_idx) {
         assert(sg.local.src_len == sg.local.dst_len);
 
-        coyote::cBench bench(n_runs);
+        coyote::cBench bench(n_runs,0);
 
         auto prep_fn = [&]() {
             coyote_thread->clearCompleted();
