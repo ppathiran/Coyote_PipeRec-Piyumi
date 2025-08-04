@@ -124,12 +124,12 @@ double run_bench(
         while (coyote_thread->checkCompleted(coyote::CoyoteOper::LOCAL_TRANSFER) != transfers) {}
 	auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed_seconds = end - start;
-	std::cout << "Elapsed time: " << elapsed_seconds.count() << "s\n";
+	//std::cout << "Elapsed time: " << elapsed_seconds.count() << "s\n";
     };
     bench.execute(bench_fn, prep_fn);
     auto total_end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> total_elapsed_seconds = total_end - total_start;
-    std::cout << "Total elapsed time: " << total_elapsed_seconds.count() << "s\n";
+    //std::cout << "Total elapsed time: " << total_elapsed_seconds.count() << "s\n";
 
     /*
     std::cout << "\n[C++] FPGA output: First 48 values:" << std::endl;
@@ -159,8 +159,8 @@ int main(int argc, char *argv[])  {
     boost::program_options::options_description runtime_options("Coyote Perf GPU Options");
     runtime_options.add_options()
         ("runs,r", boost::program_options::value<unsigned int>(&n_runs)->default_value(1), "Number of times to repeat the test") // 100
-        ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(786432), "Starting (minimum) transfer size")   // smaller than 192 bytes doesn't make sense as we need 3x16 ints per sample; original: 64, changed to: 256
-        ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(786432), "Ending (maximum) transfer size");   // original: 4 * 1024 * 1024
+        ("min_size,x", boost::program_options::value<unsigned int>(&min_size)->default_value(256), "Starting (minimum) transfer size")   // smaller than 192 bytes doesn't make sense as we need 3x16 ints per sample; original: 64, changed to: 256
+        ("max_size,X", boost::program_options::value<unsigned int>(&max_size)->default_value(4 * 1024 * 1024), "Ending (maximum) transfer size");   // original: 4 * 1024 * 1024
     boost::program_options::variables_map command_line_arguments;
     boost::program_options::store(boost::program_options::parse_command_line(argc, argv, runtime_options), command_line_arguments);
     boost::program_options::notify(command_line_arguments);
@@ -179,14 +179,14 @@ int main(int argc, char *argv[])  {
 
     unsigned int allocated_size = 4 * 1024 * 1024;  // If allocated > 4’194’304 Bytes (4MiB), the FPGA output will be all 0s as src_mem & dst_mem pointers will be in the same "window"
 
-    int *src_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocated_size});  //max_size
+    int *src_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::HPF, allocated_size});  //max_size
     int *dst_mem = (int *) coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocated_size});  //max_size
     if (!src_mem || !dst_mem) {  throw std::runtime_error("Couldn't allocate memory"); }
     if (!src_mem || !dst_mem) { throw std::runtime_error("Could not allocate memory; exiting..."); }
 
     // Benchmark sweep of latency and throughput, with functional verification (correctness) in run_bench
     coyote::sgEntry sg;
-    PR_HEADER("PERF GPU");
+    PR_HEADER("PERF CPU -> FPGA -> GPU");
     unsigned int curr_size = min_size;
     sg.local = {.src_addr = src_mem, .dst_addr = dst_mem};
     while(curr_size <= max_size) {

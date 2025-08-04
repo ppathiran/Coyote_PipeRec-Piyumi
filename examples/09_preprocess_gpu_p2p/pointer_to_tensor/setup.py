@@ -10,7 +10,7 @@ setup(
             'wrap_ptr',
             ['wrap_ptr.cpp'],
             include_dirs=[hip_include],
-            extra_compile_args=['-D__HIP_PLATFORM_HCC__'],
+            extra_compile_args=['-D__HIP_PLATFORM_AMD__'],
         ),
     ],
     cmdclass={'build_ext': BuildExtension}
