@@ -1,3 +1,30 @@
+/**
+  * Copyright (c) 2021-2024, Systems Group, ETH Zurich
+  * All rights reserved.
+  *
+  * Redistribution and use in source and binary forms, with or without modification,
+  * are permitted provided that the following conditions are met:
+  *
+  * 1. Redistributions of source code must retain the above copyright notice,
+  * this list of conditions and the following disclaimer.
+  * 2. Redistributions in binary form must reproduce the above copyright notice,
+  * this list of conditions and the following disclaimer in the documentation
+  * and/or other materials provided with the distribution.
+  * 3. Neither the name of the copyright holder nor the names of its contributors
+  * may be used to endorse or promote products derived from this software
+  * without specific prior written permission.
+  *
+  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+  * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+  * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  */
+
 #include <any>
 #include <iostream>
 #include <fstream>
@@ -58,10 +85,12 @@ public:
 
         coyote_thread = std::make_unique<coyote::cThread<std::any>>(DEFAULT_VFPGA_ID, getpid(), 0);
 
-	unsigned int allocate_size = 4 * 1024 * 1024;  // max. possible allocation is 4MiB, otherwise src_mem and dst_mem pointers will be in the same "window", resulting in no FPGA output
+	// note: max. possible allocation is 4MiB, otherwise src_mem and dst_mem pointers will be in the same "window", 
+	// resulting in no FPGA output
+	unsigned int allocate_size = 4 * 1024 * 1024;
         src_mem = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size}));  
         dst_mem[0] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size})); 
-        dst_mem[1] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size})); //changed to allocate_size
+        dst_mem[1] = static_cast<int *>(coyote_thread->getMem({coyote::CoyoteAlloc::GPU, allocate_size}));
 
         sg.local = {.src_addr = src_mem, .src_len = size, .dst_addr = dst_mem[0], .dst_len = size};
     }
@@ -95,21 +124,12 @@ public:
                 src_mem[base_idx + 42 + i] = 0;
             }
 
-            // clear destination memory
+            // clear destination memory buffers
             for (int i = 0; i < 48; ++i) {
                 dst_mem[0][base_idx + i] = 0;
                 dst_mem[1][base_idx + i] = 0;
             }
         }
-
-	// DEBUG
-	/*
-        std::cout << "\n[C++] Batch data generated (first sample):" << std::endl;
-        for (int i = 0; i < 48; ++i) {
-            std::cout << src_mem[i] << " ";
-        }
-        std::cout << std::endl;
-	*/
     }
 
     double run_bench(uint transfers, int buffer_idx) {
@@ -130,26 +150,6 @@ public:
         };
 
         bench.execute(bench_fn, prep_fn);
-
-	// DEBUG
-        //std::cout << "\n[C++] GPU Pointer: " << static_cast<void*>(dst_mem[buffer_idx]) << std::endl;
-
-	// DEBUG
-	/*
-        std::cout << "\n[C++] FPGA output: First sample of the current batch:" << std::endl;
-        for (int i = 0; i < 48; ++i) {
-            std::cout << dst_mem[buffer_idx][i] << " ";
-        }
-        std::cout << std::endl;
-       
-
-        std::cout << "\n[C++] FPGA output: Last sample of the current batch:" << std::endl;
-        int last_sample_base_idx = (batch_size - 1) * 48;
-        for (int i = 0; i < 48; ++i) {
-            std::cout << dst_mem[buffer_idx][last_sample_base_idx + i] << " ";
-        }
-        std::cout << std::endl;
-	*/
 
         return bench.getAvg();
     }
